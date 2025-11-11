@@ -1,0 +1,36 @@
+# Versión del docker-compose
+version: '3.8'
+
+# Definición de los servicios
+services:
+
+  # Servicio de la Base de Datos
+  db:
+    # Imagen que usaremos (PostgreSQL v15, ligera)
+    image: postgres:15
+
+    # Nombre del contenedor para identificarlo fácilmente
+    container_name: agendamiento_db
+
+    # Reiniciar siempre el contenedor si se cae
+    restart: unless-stopped
+
+    # Puertos: Mapea el puerto 5432 de tu máquina al 5432 del contenedor
+    # (Si tienes Postgres local ya en 5432, cambia "5432:5432" por "5433:5432")
+    ports:
+      - "5432:5432"
+
+    # Variables de entorno para crear la base de datos y el usuario
+    environment:
+      POSTGRES_DB: agendamiento_db
+      POSTGRES_USER: admin_user
+      POSTGRES_PASSWORD: admin_password
+
+    # Volúmenes: Para que los datos persistan aunque apagues el contenedor
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+# Definición de los volúmenes
+volumes:
+  postgres_data:
+    driver: local

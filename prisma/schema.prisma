@@ -1,0 +1,153 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+
+// MODELO DE USUARIO (DUEÑO DEL NEGOCIO)
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  password     String
+  businessName String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  
+  // --- ¡AÑADIR ESTO! (Campos de Rol y Plan) ---
+  
+  // Rol del usuario en la plataforma
+  // SUPER_ADMIN = Tú, el dueño del software
+  // OWNER = El dueño del negocio (la barbería, el spa)
+  role         String    @default("OWNER")
+
+  // Plan de suscripción
+  plan         String    @default("GRATIS") // GRATIS, PROFESIONAL, EMPRESA
+  maxEmployees Int       @default(1)       // Límite de empleados
+  maxServices  Int       @default(1)       // Límite de servicios
+  // --- Fin de lo añadido ---
+
+  // --- Relaciones existentes ---
+  services  Service[]
+  employees Employee[]
+
+  // --- NUEVAS RELACIONES ---
+  clientes  Cliente[] // Un negocio tiene muchos clientes
+  citas     Cita[]      // Un negocio tiene muchas citas
+  planExpiresAt DateTime?
+}
+
+// MODELO DE SERVICIO
+model Service {
+  id        String   @id @default(cuid())
+  name      String
+  duration  Int // Duración en minutos
+  price     Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // --- NUEVA RELACIÓN ---
+  citas     Cita[] // Un servicio puede estar en muchas citas
+}
+
+// --- MODELO DE EMPLEADO ---
+model Employee {
+  id           String   @id @default(cuid())
+  name         String
+  email        String?
+  phone        String?
+  color        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  availability Availability[]
+
+  // --- NUEVA RELACIÓN ---
+  citas        Cita[] // Un empleado puede tener muchas citas
+}
+
+// --- MODELO DE DISPONIBILIDAD ---
+// (Sin cambios)
+model Availability {
+  id          String   @id @default(cuid())
+  dayOfWeek   Int
+  isAvailable Boolean  @default(false)
+  startTime   String?
+  endTime     String?
+  employeeId  String
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, dayOfWeek])
+}
+
+// --- ¡NUEVO MODELO DE CLIENTE! ---
+// (El cliente final que reserva la cita)
+model Cliente {
+  id    String  @id @default(cuid())
+  name  String
+  email String?
+  phone String // Usaremos el teléfono como identificador principal
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // --- Relaciones ---
+  // De qué negocio es este cliente
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Las citas que ha tenido este cliente
+  citas  Cita[]
+
+  // Un cliente es único por (negocio + teléfono)
+  @@unique([userId, phone])
+}
+
+// --- ¡NUEVO MODELO DE CITA! ---
+// (El corazón de la aplicación)
+model Cita {
+  id      String   @id @default(cuid())
+  // Fecha y hora de inicio de la cita
+  startTime DateTime
+  // Fecha y hora de fin (calculada = startTime + service.duration)
+  endTime   DateTime
+  
+  status String @default("PENDING") // PENDING, CONFIRMED, COMPLETED, CANCELED
+  notes  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // --- Relaciones ---
+  // Quién es el dueño de esta cita
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Quién atiende esta cita
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  // Qué servicio se realiza
+  serviceId  String
+  service    Service  @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  
+  // Quién reserva esta cita
+  clienteId  String
+  cliente    Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  // ¡NUEVO CAMPO!
+  // Un token secreto único para cada cita, usado para cancelar.
+  cancelToken String   @unique @default(cuid()) @map("cancel_token")
+
+  // --- ¡CAMPO NUEVO! ---
+  // Para saber si ya le enviamos el recordatorio.
+  reminderSent Boolean @default(false) @map("reminder_sent")
+}
