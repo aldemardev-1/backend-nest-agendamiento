@@ -12,13 +12,10 @@ import { QueryCitaDto } from './dto/query-cita.dto';
 import { PublicService } from 'src/public/public.service';
 import { EmailService } from 'src/email/email.service';
 
-// 1. IMPORTAMOS LA FUNCIÓN PARA ZONAS HORARIAS
 import { formatInTimeZone } from 'date-fns-tz';
 
 @Injectable()
 export class CitasService {
-  // 2. DEFINIMOS LA ZONA HORARIA DEL NEGOCIO
-  // Idealmente esto podría venir de una variable de entorno process.env.TIME_ZONE
   private readonly timeZone = 'America/Bogota';
 
   constructor(
@@ -27,13 +24,9 @@ export class CitasService {
     private emailService: EmailService,
   ) {}
 
-  /**
-   * CREAR una cita (para el usuario logueado)
-   */
   async create(createCitaDto: CreateCitaDto, userId: string) {
     const { startTime, serviceId, employeeId } = createCitaDto;
 
-    // startTime llega como UTC (ej: ...T16:30:00.000Z)
     const startTimeDate = new Date(startTime);
     console.log('start:time recibido (UTC): ', startTime);
 
@@ -73,13 +66,10 @@ export class CitasService {
       throw new ForbiddenException('Servicio no válido.');
     }
 
-    // Calculamos endTime sumando minutos (Date trabaja en ms, así que funciona bien con UTC)
     const endTimeDate = new Date(
       startTimeDate.getTime() + service.duration * 60000,
     );
 
-    // 5. Crear la cita (ASIGNANDO EL userId)
-    // Prisma guarda fechas como objetos Date (UTC), lo cual es correcto para la base de datos
     const cita = await this.prisma.cita.create({
       data: {
         ...createCitaDto,
@@ -92,7 +82,7 @@ export class CitasService {
         cliente: true,
         service: true,
         employee: true,
-        user: true, // Necesitamos al dueño (User) para su email
+        user: true,
       },
     });
 
