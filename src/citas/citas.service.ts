@@ -10,11 +10,17 @@ import { UpdateCitaDto } from './dto/update-cita.dto';
 import { Prisma } from '@prisma/client';
 import { QueryCitaDto } from './dto/query-cita.dto';
 import { PublicService } from 'src/public/public.service';
-import { format } from 'date-fns';
 import { EmailService } from 'src/email/email.service';
+
+// 1. IMPORTAMOS LA FUNCIÓN PARA ZONAS HORARIAS
+import { formatInTimeZone } from 'date-fns-tz';
 
 @Injectable()
 export class CitasService {
+  // 2. DEFINIMOS LA ZONA HORARIA DEL NEGOCIO
+  // Idealmente esto podría venir de una variable de entorno process.env.TIME_ZONE
+  private readonly timeZone = 'America/Bogota';
+
   constructor(
     private prisma: PrismaService,
     private publicService: PublicService,
@@ -27,10 +33,23 @@ export class CitasService {
   async create(createCitaDto: CreateCitaDto, userId: string) {
     const { startTime, serviceId, employeeId } = createCitaDto;
 
-    // 1. Validar la disponibilidad (usando la lógica pública)
+    // startTime llega como UTC (ej: ...T16:30:00.000Z)
     const startTimeDate = new Date(startTime);
-    const dateString = format(startTimeDate, 'yyyy-MM-dd');
-    const timeString = format(startTimeDate, 'HH:mm');
+    console.log('start:time recibido (UTC): ', startTime);
+
+    // 3. USAMOS formatInTimeZone
+    // Esto convierte la hora UTC a la hora local de Colombia para la validación
+    // Si UTC es 16:30, en Bogotá (UTC-5) será 11:30
+    const dateString = formatInTimeZone(
+      startTimeDate,
+      this.timeZone,
+      'yyyy-MM-dd',
+    );
+    const timeString = formatInTimeZone(startTimeDate, this.timeZone, 'HH:mm');
+
+    console.log(
+      `Validando disponibilidad local: Fecha ${dateString}, Hora ${timeString}`,
+    );
 
     const availableSlots = await this.publicService.getAvailability({
       date: dateString,
@@ -44,7 +63,7 @@ export class CitasService {
       );
     }
 
-    // 2. Obtener la duración del servicio para calcular endTime
+    // 4. Obtener la duración del servicio para calcular endTime
     const service = await this.prisma.service.findUnique({
       where: { id: serviceId },
     });
@@ -53,18 +72,20 @@ export class CitasService {
     if (service.userId !== userId) {
       throw new ForbiddenException('Servicio no válido.');
     }
-    
+
+    // Calculamos endTime sumando minutos (Date trabaja en ms, así que funciona bien con UTC)
     const endTimeDate = new Date(
       startTimeDate.getTime() + service.duration * 60000,
     );
 
-    // 3. Crear la cita (ASIGNANDO EL userId)
+    // 5. Crear la cita (ASIGNANDO EL userId)
+    // Prisma guarda fechas como objetos Date (UTC), lo cual es correcto para la base de datos
     const cita = await this.prisma.cita.create({
       data: {
         ...createCitaDto,
         startTime: startTimeDate,
         endTime: endTimeDate,
-        userId: userId, // <-- ¡LÍNEA DE SEGURIDAD!
+        userId: userId,
         status: 'PENDING',
       },
       include: {
@@ -75,7 +96,7 @@ export class CitasService {
       },
     });
 
-    // --- 4. Disparar Emails ---
+    // --- 6. Disparar Emails ---
     if (cita.user && cita.cliente) {
       try {
         await this.emailService.sendBookingConfirmation(cita);
@@ -100,10 +121,10 @@ export class CitasService {
    */
   async findAll(userId: string, queryDto: QueryCitaDto) {
     const { page = 1, limit = 10, startDate, endDate, employeeId } = queryDto;
-    const skip = (page - 1) * Number(limit); // Asegurar que sea número
+    const skip = (page - 1) * Number(limit);
 
     const whereClause: Prisma.CitaWhereInput = {
-      userId: userId, // <-- ¡LÍNEA DE SEGURIDAD CLAVE!
+      userId: userId,
     };
 
     if (employeeId) {
@@ -167,7 +188,6 @@ export class CitasService {
     if (!cita) {
       throw new NotFoundException('Cita no encontrada');
     }
-    // ¡LÍNEA DE SEGURIDAD CLAVE!
     if (cita.userId !== userId) {
       throw new ForbiddenException('No tienes permiso para ver esta cita');
     }
@@ -179,30 +199,28 @@ export class CitasService {
    */
   async update(id: string, updateCitaDto: UpdateCitaDto, userId: string) {
     // 1. Validar que la cita existe y pertenece al usuario
-    await this.findOne(id, userId); 
+    await this.findOne(id, userId);
 
     // 2. Recalcular endTime si startTime o serviceId cambian
     let endTimeDate: Date | undefined = undefined;
     if (updateCitaDto.startTime || updateCitaDto.serviceId) {
       // Necesitamos los datos actuales
       const citaActual = await this.prisma.cita.findUnique({ where: { id } });
-      
       const newStartTime = updateCitaDto.startTime
         ? new Date(updateCitaDto.startTime)
-        : new Date(citaActual!.startTime); // ! es seguro por el findOne de arriba
-        
+        : new Date(citaActual!.startTime);
       const newServiceId = updateCitaDto.serviceId || citaActual!.serviceId;
 
       const service = await this.prisma.service.findUnique({
         where: { id: newServiceId },
       });
       if (!service) throw new NotFoundException('Servicio no encontrado.');
-      
       // Validar que el nuevo servicio también pertenezca al usuario
       if (service.userId !== userId) {
-        throw new ForbiddenException('No puedes asignar un servicio que no te pertenece.');
+        throw new ForbiddenException(
+          'No puedes asignar un servicio que no te pertenece.',
+        );
       }
-      
       endTimeDate = new Date(newStartTime.getTime() + service.duration * 60000);
     }
 
@@ -214,7 +232,7 @@ export class CitasService {
         startTime: updateCitaDto.startTime
           ? new Date(updateCitaDto.startTime)
           : undefined,
-        endTime: endTimeDate, // Actualizar endTime si se calculó
+        endTime: endTimeDate,
       },
     });
   }

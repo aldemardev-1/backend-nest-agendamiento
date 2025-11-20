@@ -6,11 +6,13 @@ import {
   Service,
   Employee,
   Prisma,
+  User, // <-- 1. IMPORTAR User
+  Payment, // <-- 2. IMPORTAR Payment
 } from '@prisma/client';
 import { format, add, sub } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { PrismaService } from 'src/prisma/prisma.service'; // <-- 1. IMPORTAR PRISMA
+import { PrismaService } from 'src/prisma/prisma.service';
 
 // Definir la forma de la cita con los includes (¡importante!)
 type CitaConDetalles = Cita & {
@@ -21,24 +23,19 @@ type CitaConDetalles = Cita & {
 
 @Injectable()
 export class EmailService {
-  // --- 2. AÑADIR LOGGER Y PRISMA ---
+  // --- AÑADIR LOGGER Y PRISMA ---
   private readonly logger = new Logger(EmailService.name);
   constructor(
     private mailerService: MailerService,
-    private prisma: PrismaService, // <-- 3. INYECTAR PRISMA
+    private prisma: PrismaService, // <-- INYECTAR PRISMA
   ) {}
 
-  // --- 4. NUEVA TAREA PROGRAMADA (CRON JOB) ---
-  /**
-   * Esta función se ejecuta automáticamente cada hora.
-   * Busca citas para "mañana" y envía recordatorios.
-   */
-  @Cron(CronExpression.EVERY_HOUR) // Puedes cambiarlo a EVERY_30_MINUTES si prefieres
+  // --- TAREA PROGRAMADA (CRON JOB) ---
+  @Cron(CronExpression.EVERY_HOUR)
   async handleCronSendReminders() {
     this.logger.log('Ejecutando Cron Job: Buscando recordatorios para enviar...');
 
     // 1. Definir el rango de "Mañana"
-    // (Desde mañana a las 00:00 hasta mañana a las 23:59)
     const now = new Date();
     const tomorrowStart = add(now, { days: 1 });
     tomorrowStart.setHours(0, 0, 0, 0);
@@ -72,11 +69,9 @@ export class EmailService {
 
     // 3. Enviar recordatorios y marcar como enviados
     for (const cita of citasParaRecordar) {
-      // Usamos 'as any' porque el 'include' nos da los detalles
       try {
         await this.sendReminderEmail(cita as any);
         
-        // 4. ¡CRÍTICO! Marcar la cita como enviada
         await this.prisma.cita.update({
           where: { id: cita.id },
           data: { reminderSent: true },
@@ -89,10 +84,7 @@ export class EmailService {
     }
   }
 
-  // --- 5. NUEVA PLANTILLA DE EMAIL (Recordatorio) ---
-  /**
-   * Envía un email de recordatorio (24h antes) AL CLIENTE.
-   */
+  // --- PLANTILLA DE EMAIL (Recordatorio) ---
   async sendReminderEmail(cita: CitaConDetalles) {
     if (!cita.cliente.email) {
       console.warn(`Cliente ${cita.cliente.name} no tiene email, saltando recordatorio.`);
@@ -119,7 +111,7 @@ export class EmailService {
             <p><strong>Fecha:</strong> <span style="text-transform: capitalize;">${fecha}</span></p>
             <p><strong>Hora:</strong> ${hora}</p>
           </div>
-          <p style="margin-top: 25px;">Si ya no puedes asistir, por favor cancela tu cita usando el botón de abajo para liberar el espacio.</p>
+          <p style="margin-top: 25px;">Si ya no puedes asistir, por favor cancela tu cita.</p>
           <p style="text-align: center;">
             <a 
               href="${cancelUrl}" 
@@ -139,12 +131,7 @@ export class EmailService {
     });
   }
 
-
-  // --- FUNCIONES EXISTENTES (Sin cambios) ---
-
-  /**
-   * Envía la confirmación de la cita AL CLIENTE.
-   */
+  // --- (sendBookingConfirmation - sin cambios) ---
   async sendBookingConfirmation(cita: CitaConDetalles) {
     if (!cita.cliente.email) {
       console.warn(
@@ -193,9 +180,7 @@ export class EmailService {
     });
   }
 
-  /**
-   * Envía una notificación de nueva reserva AL DUEÑO DEL NEGOCIO.
-   */
+  // --- (sendNewBookingNotification - sin cambios) ---
   async sendNewBookingNotification(
     cita: CitaConDetalles,
     businessOwnerEmail: string,
@@ -227,9 +212,7 @@ export class EmailService {
     });
   }
 
-  /**
-   * Envía la confirmación de cancelación AL CLIENTE.
-   */
+  // --- (sendCancellationConfirmation - sin cambios) ---
   async sendCancellationConfirmation(cita: CitaConDetalles) {
     if (!cita.cliente.email) {
       return; // No se puede notificar si no hay email
@@ -251,6 +234,53 @@ export class EmailService {
              programada para el <strong>${fecha}</strong> ha sido cancelada exitosamente.</p>
         </div>
       `,
+    });
+  }
+
+  // --- 3. ¡FUNCIÓN AÑADIDA! ---
+  /**
+   * Envía la confirmación de un PAGO EXITOSO al DUEÑO DEL NEGOCIO.
+   */
+  async sendPaymentSuccess(
+    user: User, // El usuario (dueño) que pagó
+    payment: Payment, // El registro del pago
+    plan: string, // El plan que compró (ej. "PROFESIONAL")
+  ) {
+    if (!user.email) {
+      this.logger.warn(`Usuario ${user.id} pagó pero no tiene email.`);
+      return; // No se puede notificar si no hay email
+    }
+
+    // Formatear el monto a pesos colombianos
+    const formattedAmount = new Intl.NumberFormat('es-CO', {
+      style: 'currency',
+      currency: 'COP',
+      minimumFractionDigits: 0,
+    }).format(payment.amount);
+
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;">
+        <div style="background-color: #28a745; color: white; padding: 20px; text-align: center;">
+          <h1 style="margin: 0;">¡Pago Exitoso!</h1>
+        </div>
+        <div style="padding: 30px;">
+          <p>Hola <strong>${user.businessName}</strong>,</p>
+          <p>Hemos recibido tu pago y tu plan ha sido actualizado exitosamente.</p>
+          <div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px;">
+            <p><strong>Plan Adquirido:</strong> ${plan}</p>
+            <p><strong>Monto Pagado:</strong> ${formattedAmount} COP</p>
+            <p><strong>Referencia:</strong> ${payment.reference }</p>
+            <p><strong>ID Transacción:</strong> ${payment.wompiId || 'N/A'}</p>
+          </div>
+          <p style="margin-top: 25px;">Gracias por confiar en Tu Agenda App.</p>
+        </div>
+      </div>
+    `;
+
+    await this.mailerService.sendMail({
+      to: user.email,
+      subject: `Confirmación de Pago - Plan ${plan}`,
+      html: htmlContent,
     });
   }
 }

@@ -7,6 +7,20 @@ datasource db {
   url = env("DATABASE_URL")
 }
 
+model Payment {
+  id          String    @id @default(cuid())
+  amount      Float     // Cuánto pagó (ej. 49900)
+  currency    String    @default("COP")
+  status      String    // PENDING, COMPLETED, FAILED
+  reference   String    @unique // La referencia única (ej. "plan-profesional-USER_ID")
+  wompiId     String?   @unique // El ID de la transacción de Wompi
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+}
+
 // MODELO DE USUARIO (DUEÑO DEL NEGOCIO)
 model User {
   id           String     @id @default(cuid())
@@ -34,6 +48,7 @@ model User {
   // --- Relaciones existentes ---
   services  Service[]
   employees Employee[]
+  payments Payment[]
 
   // --- NUEVAS RELACIONES ---
   clientes  Cliente[] // Un negocio tiene muchos clientes

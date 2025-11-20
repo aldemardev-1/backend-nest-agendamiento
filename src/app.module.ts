@@ -12,6 +12,7 @@ import { PublicModule } from './public/public.module';
 import { EmailModule } from './email/email.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AdminModule } from './admin/admin.module';
+import { PaymentsModule } from './payments/payments.module';
 // ¡Ya no importamos JwtModule ni ConfigService aquí!
 
 @Module({
@@ -31,6 +32,7 @@ import { AdminModule } from './admin/admin.module';
     PublicModule,
     EmailModule,
     AdminModule,
+    PaymentsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
