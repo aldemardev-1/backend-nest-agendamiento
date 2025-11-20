@@ -56,12 +56,10 @@ export class CitasService {
       );
     }
 
-    // 4. Obtener la duración del servicio para calcular endTime
     const service = await this.prisma.service.findUnique({
       where: { id: serviceId },
     });
     if (!service) throw new NotFoundException('Servicio no encontrado.');
-    // Validar que el servicio pertenezca al usuario
     if (service.userId !== userId) {
       throw new ForbiddenException('Servicio no válido.');
     }
