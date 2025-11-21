@@ -13,62 +13,57 @@ import { ServicesService } from './services.service';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 import { AuthGuard } from '@nestjs/passport';
-import { GetUser } from 'src/auth/decorator/get-user.decorator'; // <-- 1. IMPORTAR
+import { GetUser } from 'src/auth/decorator/get-user.decorator';
 import { QueryServiceDto } from './dto/query-service.dto';
 
-@UseGuards(AuthGuard('jwt')) // <-- Proteger todo el controlador
+// Definimos la interfaz correcta (igual que en EmployeesController)
+interface UserPayload {
+  userId: string;
+  email: string;
+  role: string;
+}
+
+@UseGuards(AuthGuard('jwt'))
 @Controller('services')
 export class ServicesController {
   constructor(private readonly servicesService: ServicesService) {}
 
-  // --- ¡CORREGIDO! ---
   @Post()
   create(
     @Body() createServiceDto: CreateServiceDto,
-    @GetUser() user: { sub: string }, // <-- 2. Obtener el User del token
+    @GetUser() user: UserPayload, // <-- 1. Usamos la interfaz correcta
   ) {
-    // 3. Pasar el ID del usuario (user.sub) al servicio
-    return this.servicesService.create(createServiceDto, user.sub);
+    // 2. Usamos user.userId (NO user.sub)
+    return this.servicesService.create(createServiceDto, user.userId);
   }
 
-  // --- ¡CORREGIDO! ---
   @Get()
   findAll(
     @Query() query: QueryServiceDto,
-    @GetUser() user: { sub: string }, // <-- 2. Obtener el User
+    @GetUser() user: UserPayload,
   ) {
-    // 3. Pasar el ID del usuario
-    return this.servicesService.findAll(user.sub, query);
+    return this.servicesService.findAll(user.userId, query);
   }
 
-  // --- ¡CORREGIDO! ---
   @Get(':id')
-  findOne(
-    @Param('id') id: string,
-    @GetUser() user: { sub: string }, // <-- 2. Obtener el User
-  ) {
-    // 3. Pasar el ID del usuario
-    return this.servicesService.findOne(id, user.sub);
+  findOne(@Param('id') id: string, @GetUser() user: UserPayload) {
+    return this.servicesService.findOne(id, user.userId);
   }
 
-  // --- ¡CORREGIDO! ---
   @Patch(':id')
   update(
     @Param('id') id: string,
     @Body() updateServiceDto: UpdateServiceDto,
-    @GetUser() user: { sub: string }, // <-- 2. Obtener el User
+    @GetUser() user: UserPayload,
   ) {
-    // 3. Pasar el ID del usuario
-    return this.servicesService.update(id, updateServiceDto, user.sub);
+    return this.servicesService.update(id, updateServiceDto, user.userId);
   }
 
-  // --- ¡CORREGIDO! ---
   @Delete(':id')
   remove(
     @Param('id') id: string,
-    @GetUser() user: { sub: string }, // <-- 2. Obtener el User
+    @GetUser() user: UserPayload,
   ) {
-    // 3. Pasar el ID del usuario
-    return this.servicesService.remove(id, user.sub);
+    return this.servicesService.remove(id, user.userId);
   }
 }

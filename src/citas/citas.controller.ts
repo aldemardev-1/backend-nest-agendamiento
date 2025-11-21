@@ -16,6 +16,11 @@ import { AuthGuard } from '@nestjs/passport';
 import { GetUser } from 'src/auth/decorator/get-user.decorator'; // <-- 1. IMPORTAR
 import { QueryCitaDto } from './dto/query-cita.dto';
 
+interface UserPayload {
+  userId: string;
+  email: string;
+  role: string;
+}
 @UseGuards(AuthGuard('jwt'))
 @Controller('citas')
 export class CitasController {
@@ -25,9 +30,9 @@ export class CitasController {
   @Post()
   create(
     @Body() createCitaDto: CreateCitaDto,
-    @GetUser() user: { sub: string }, // <-- 2. Obtener User
+    @GetUser() user: UserPayload, // <-- 2. Obtener User
   ) {
-    return this.citasService.create(createCitaDto, user.sub);
+    return this.citasService.create(createCitaDto, user.userId);
   }
 
   // --- ¡CORREGIDO! ---
