@@ -1,168 +1,170 @@
+// 1. GENERADOR
 generator client {
   provider = "prisma-client-js"
 }
 
+// 2. DATASOURCE
 datasource db {
   provider = "postgresql"
-  url = env("DATABASE_URL")
+  url      = env("DATABASE_URL")
 }
 
-model Payment {
-  id          String    @id @default(cuid())
-  amount      Float     // Cuánto pagó (ej. 49900)
-  currency    String    @default("COP")
-  status      String    // PENDING, COMPLETED, FAILED
-  reference   String    @unique // La referencia única (ej. "plan-profesional-USER_ID")
-  wompiId     String?   @unique // El ID de la transacción de Wompi
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  userId      String
-  user        User      @relation(fields: [userId], references: [id])
+// 3. ENUMS (Tipos fijos)
+enum Role {
+  SUPER_ADMIN
+  OWNER
+  EMPLOYEE
 }
 
-// MODELO DE USUARIO (DUEÑO DEL NEGOCIO)
+enum Plan {
+  FREE
+  PROFESIONAL
+  EMPRESA
+}
+
+// 4. MODELOS
+
+// --- USUARIO / DUEÑO DEL NEGOCIO ---
 model User {
-  id           String     @id @default(cuid())
-  email        String     @unique
+  id           String   @id @default(cuid())
+  email        String   @unique
   password     String
   businessName String
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
   
-  // --- ¡AÑADIR ESTO! (Campos de Rol y Plan) ---
+  // Campos de Perfil (Nuevos)
+  phone        String?  // Opcional al inicio
+  address      String?  // Opcional
+  city         String?  // Opcional
+
+  // Configuración de Cuenta
+  role         Role     @default(OWNER)
+  plan         Plan     @default(FREE)
   
-  // Rol del usuario en la plataforma
-  // SUPER_ADMIN = Tú, el dueño del software
-  // OWNER = El dueño del negocio (la barbería, el spa)
-  role         String    @default("OWNER")
-
-  // Plan de suscripción
-  plan         String    @default("GRATIS") // GRATIS, PROFESIONAL, EMPRESA
-  maxEmployees Int       @default(1)       // Límite de empleados
-  maxServices  Int       @default(1)       // Límite de servicios
-  // --- Fin de lo añadido ---
-
-  // --- Relaciones existentes ---
-  services  Service[]
-  employees Employee[]
-  payments Payment[]
-
-  // --- NUEVAS RELACIONES ---
-  clientes  Cliente[] // Un negocio tiene muchos clientes
-  citas     Cita[]      // Un negocio tiene muchas citas
+  // Límites del Plan
+  maxEmployees Int      @default(1)
+  maxServices  Int      @default(1)
+  
   planExpiresAt DateTime?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relaciones
+  services     Service[]
+  employees    Employee[]
+  payments     Payment[]
+  clientes     Cliente[]
+  citas        Cita[]
 }
 
-// MODELO DE SERVICIO
+// --- SERVICIO ---
 model Service {
   id        String   @id @default(cuid())
   name      String
-  duration  Int // Duración en minutos
+  duration  Int      // Minutos
   price     Float
+  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  // --- NUEVA RELACIÓN ---
-  citas     Cita[] // Un servicio puede estar en muchas citas
+  
+  citas     Cita[]
 }
 
-// --- MODELO DE EMPLEADO ---
+// --- EMPLEADO ---
 model Employee {
-  id           String   @id @default(cuid())
-  name         String
-  email        String?
-  phone        String?
-  color        String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  userId       String
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
+  id        String   @id @default(cuid())
+  name      String
+  email     String?
+  phone     String?
+  color     String?  // Para el calendario
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
   availability Availability[]
-
-  // --- NUEVA RELACIÓN ---
-  citas        Cita[] // Un empleado puede tener muchas citas
+  citas        Cita[]
 }
 
-// --- MODELO DE DISPONIBILIDAD ---
-// (Sin cambios)
+// --- DISPONIBILIDAD ---
 model Availability {
-  id          String   @id @default(cuid())
-  dayOfWeek   Int
-  isAvailable Boolean  @default(false)
-  startTime   String?
-  endTime     String?
+  id          String  @id @default(cuid())
+  dayOfWeek   Int     // 0 = Domingo, 1 = Lunes...
+  isAvailable Boolean @default(false)
+  startTime   String? // "09:00"
+  endTime     String? // "18:00"
+  
   employeeId  String
   employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@unique([employeeId, dayOfWeek])
 }
 
-// --- ¡NUEVO MODELO DE CLIENTE! ---
-// (El cliente final que reserva la cita)
+// --- CLIENTE FINAL ---
 model Cliente {
-  id    String  @id @default(cuid())
-  name  String
-  email String?
-  phone String // Usaremos el teléfono como identificador principal
-
+  id        String   @id @default(cuid())
+  name      String
+  email     String?
+  phone     String
+  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  citas     Cita[]
 
-  // --- Relaciones ---
-  // De qué negocio es este cliente
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  // Las citas que ha tenido este cliente
-  citas  Cita[]
-
-  // Un cliente es único por (negocio + teléfono)
+  // Un cliente es único por negocio + teléfono
   @@unique([userId, phone])
 }
 
-// --- ¡NUEVO MODELO DE CITA! ---
-// (El corazón de la aplicación)
+// --- CITA (BOOKING) ---
 model Cita {
-  id      String   @id @default(cuid())
-  // Fecha y hora de inicio de la cita
-  startTime DateTime
-  // Fecha y hora de fin (calculada = startTime + service.duration)
-  endTime   DateTime
+  id            String   @id @default(cuid())
+  startTime     DateTime
+  endTime       DateTime
   
-  status String @default("PENDING") // PENDING, CONFIRMED, COMPLETED, CANCELED
-  notes  String?
+  status        String   @default("PENDING") // PENDING, CONFIRMED, COMPLETED, CANCELLED
+  notes         String?
+  
+  cancelToken   String   @unique @default(cuid()) @map("cancel_token")
+  reminderSent  Boolean  @default(false) @map("reminder_sent")
 
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relaciones
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  employeeId    String
+  employee      Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  
+  serviceId     String
+  service       Service  @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  
+  clienteId     String
+  cliente       Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+}
+
+// --- PAGOS (Suscripción del SaaS) ---
+model Payment {
+  id        String   @id @default(cuid())
+  amount    Float
+  currency  String   @default("COP")
+  status    String   // PENDING, COMPLETED, FAILED
+  reference String   @unique
+  wompiId   String?  @unique
+  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // --- Relaciones ---
-  // Quién es el dueño de esta cita
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  // Quién atiende esta cita
-  employeeId String
-  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
-
-  // Qué servicio se realiza
-  serviceId  String
-  service    Service  @relation(fields: [serviceId], references: [id], onDelete: Restrict)
-  
-  // Quién reserva esta cita
-  clienteId  String
-  cliente    Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
-
-  // ¡NUEVO CAMPO!
-  // Un token secreto único para cada cita, usado para cancelar.
-  cancelToken String   @unique @default(cuid()) @map("cancel_token")
-
-  // --- ¡CAMPO NUEVO! ---
-  // Para saber si ya le enviamos el recordatorio.
-  reminderSent Boolean @default(false) @map("reminder_sent")
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
 }

@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { UpdatePlanDto } from './dto/update-plan.dto';
 import { AdminQueryDto } from './dto/admin-query.dto';
-import { Prisma } from '@prisma/client';
+import { Plan, Prisma } from '@prisma/client';
 import { Cron, CronExpression } from '@nestjs/schedule';
 
 @Injectable()
@@ -97,7 +97,7 @@ export class AdminService {
     return this.prisma.user.update({
       where: { id: userId },
       data: {
-        plan: dto.plan,
+        plan: dto.plan as Plan,
         maxEmployees: maxEmployees,
         maxServices: maxServices,
         planExpiresAt: planExpiresAt,
@@ -116,7 +116,7 @@ export class AdminService {
     const expiredUsers = await this.prisma.user.findMany({
       where: {
         role: 'OWNER',
-        plan: { not: 'GRATIS' },
+        plan: { not: Plan.FREE },
         planExpiresAt: {
           lte: now,
         },
@@ -134,7 +134,7 @@ export class AdminService {
       await this.prisma.user.update({
         where: { id: user.id },
         data: {
-          plan: 'GRATIS',
+          plan: Plan.FREE,
           maxEmployees: 1,
           maxServices: 1,
           planExpiresAt: null,
@@ -142,5 +142,29 @@ export class AdminService {
       });
       this.logger.log(`Plan de ${user.email} revertido a GRATIS.`);
     }
+  }
+
+  async getGlobalStats() {
+    // Total Negocios
+    const totalBusinesses = await this.prisma.user.count({
+      where: { role: 'OWNER' },
+    });
+
+    // Total Citas (Métrica de uso global de tu plataforma)
+    const totalCitas = await this.prisma.cita.count();
+
+    // MRR (Ingresos Mensuales Recurrentes)
+    // Sumamos todos los pagos completados del mes actual (o histórico si prefieres)
+    // Por ahora, sumemos todo el historial de la tabla Payment
+    const payments = await this.prisma.payment.aggregate({
+      _sum: { amount: true },
+      where: { status: 'COMPLETED' }, // Solo pagos reales
+    });
+
+    return {
+      totalBusinesses,
+      totalCitas, // Usaremos "Citas Totales" en lugar de "Usuarios" porque es más relevante para el SaaS
+      mrr: payments._sum.amount || 0,
+    };
   }
 }

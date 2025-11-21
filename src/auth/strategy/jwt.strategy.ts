@@ -1,49 +1,37 @@
-import { Injectable } from '@nestjs/common';
-import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import { ConfigService } from '@nestjs/config'; // Importar ConfigService
+import { PassportStrategy } from '@nestjs/passport';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 
-// Este es el payload que DEFINIMOS en el auth.service
-// y que está DENTRO del token
-type JwtPayload = {
+// Definimos la interfaz para evitar 'any'
+export interface PayloadToken {
   sub: string;
   email: string;
   role: string;
-  ownerId?: string; // (Solo para empleados)
-};
+  name: string;
+}
 
 @Injectable()
-export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
-  // Inyectar ConfigService
-  constructor(config: ConfigService) {
-    // --- ¡AQUÍ ESTÁ LA CORRECCIÓN! ---
-
-    // 1. Obtenemos la variable de entorno ANTES de llamar a super()
-    const secret = config.get('JWT_SECRET') || '';
-    console.log('secret: ', secret);
-    // 2. ¡Validación Crítica!
-    // Si el .env no tiene JWT_SECRET, la app debe fallar al arrancar.
-    // Esto nos da un error claro en lugar del error de TypeScript.
-    if (!secret) {
-      throw new Error('JWT_SECRET no está definida en el archivo .env. La aplicación no puede arrancar.');
-    }
-
-    // 3. Pasamos las opciones a super()
+export class JwtStrategy extends PassportStrategy(Strategy) {
+  constructor() {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: secret || '', // <-- Ahora TypeScript sabe que 'secret' SÍ es un string.
+      secretOrKey: process.env.JWT_SECRET || 'secretKey',
     });
   }
 
-  /**
-   * NestJS llama a esto DESPUÉS de validar la firma y la expiración.
-   * El 'payload' es el token ya decodificado.
-   * Lo que retornamos aquí se adjunta a 'request.user'.
-   */
-  async validate(payload: JwtPayload) {
-    // Simplemente devolvemos el payload.
-    // Es rápido, seguro, y funciona para todos los roles.
-    return payload;
+  async validate(payload: PayloadToken) {
+
+    if (!payload.sub) {
+      throw new UnauthorizedException('Token inválido: falta el ID (sub)');
+    }
+
+    // Retornamos el objeto que se inyectará en 'req.user'
+    return {
+      userId: payload.sub, // Aquí mapeamos 'sub' a 'userId'
+      email: payload.email,
+      role: payload.role,
+      businessName: payload.name,
+    };
   }
 }

@@ -13,6 +13,8 @@ import { EmailModule } from './email/email.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AdminModule } from './admin/admin.module';
 import { PaymentsModule } from './payments/payments.module';
+import { ReportsModule } from './reports/reports.module';
+import { UsersModule } from './users/users.module';
 // ¡Ya no importamos JwtModule ni ConfigService aquí!
 
 @Module({
@@ -33,6 +35,8 @@ import { PaymentsModule } from './payments/payments.module';
     EmailModule,
     AdminModule,
     PaymentsModule,
+    ReportsModule,
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

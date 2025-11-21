@@ -20,6 +20,12 @@ import { AdminQueryDto } from './dto/admin-query.dto'; // <-- 2. IMPORTAR
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
 
+  // 1. Dashboard Stats (NUEVO)
+  @Get('stats')
+  getStats() {
+    return this.adminService.getGlobalStats();
+  }
+
   /**
    * [Super Admin] Obtiene la lista de todos los negocios (PAGINADO)
    * @route GET /admin/businesses

@@ -10,6 +10,7 @@ import { HttpService } from '@nestjs/axios';
 import { CreatePaymentLinkDto } from './dto/create-payment.dto';
 import { firstValueFrom } from 'rxjs';
 import { EmailService } from 'src/email/email.service';
+import { Plan } from '@prisma/client';
 
 // Precios de los planes (en centavos de COP)
 const PLAN_PRICES = {
@@ -167,7 +168,7 @@ export class PaymentsService {
           this.prisma.user.update({
             where: { id: payment.userId },
             data: {
-              plan: plan,
+              plan: plan as Plan,
               maxEmployees: maxEmployees,
               maxServices: 9999, // Servicios ilimitados en planes pagos
               planExpiresAt: planExpiresAt,
