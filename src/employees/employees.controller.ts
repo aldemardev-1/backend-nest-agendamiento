@@ -13,78 +13,74 @@ import { EmployeesService } from './employees.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { AuthGuard } from '@nestjs/passport';
-import { GetUser } from 'src/auth/decorator/get-user.decorator'; // <-- 1. IMPORTAR
+import { GetUser } from 'src/auth/decorator/get-user.decorator';
 import { QueryEmployeeDto } from './dto/query-employee.dto';
 import { UpdateAvailabilityDto } from './dto/availability.dto';
+
+// Definimos la interfaz del usuario para no usar 'any' ni tipos incorrectos
+interface UserPayload {
+  userId: string;
+  email: string;
+  role: string;
+}
 
 @UseGuards(AuthGuard('jwt'))
 @Controller('employees')
 export class EmployeesController {
   constructor(private readonly employeesService: EmployeesService) {}
 
-  // --- ¡CORREGIDO! ---
   @Post()
   create(
     @Body() createEmployeeDto: CreateEmployeeDto,
-    @GetUser() user: { sub: string }, // <-- 2. Obtener User
+    @GetUser() user: UserPayload, // <-- 1. Usamos la interfaz correcta
   ) {
-    // 3. Pasar user.sub (userId)
-    return this.employeesService.create(createEmployeeDto, user.sub);
+    // 2. Usamos user.userId en lugar de user.sub
+    return this.employeesService.create(createEmployeeDto, user.userId);
   }
 
-  // --- ¡CORREGIDO! ---
   @Get()
   findAll(
-    @GetUser() user: { sub: string }, // <-- 2. Obtener User
+    @GetUser() user: UserPayload,
     @Query() queryDto: QueryEmployeeDto,
   ) {
-    // 3. Pasar user.sub (userId)
-    return this.employeesService.findAll(user.sub, queryDto);
+    return this.employeesService.findAll(user.userId, queryDto);
   }
 
-  // --- ¡CORREGIDO! ---
   @Get(':id')
-  findOne(
-    @Param('id') id: string,
-    @GetUser() user: { sub: string }, // <-- 2. Obtener User
+  findOne(@Param('id') id: string,
+    @GetUser() user: UserPayload,
   ) {
-    return this.employeesService.findOne(id, user.sub);
+    return this.employeesService.findOne(id, user.userId);
   }
 
-  // --- ¡CORREGIDO! ---
   @Patch(':id')
   update(
     @Param('id') id: string,
     @Body() updateEmployeeDto: UpdateEmployeeDto,
-    @GetUser() user: { sub: string }, // <-- 2. Obtener User
+    @GetUser() user: UserPayload,
   ) {
-    return this.employeesService.update(id, updateEmployeeDto, user.sub);
+    return this.employeesService.update(id, updateEmployeeDto, user.userId);
   }
 
-  // --- ¡CORREGIDO! ---
   @Delete(':id')
-  remove(
-    @Param('id') id: string,
-    @GetUser() user: { sub: string }, // <-- 2. Obtener User
-  ) {
-    return this.employeesService.remove(id, user.sub);
+  remove(@Param('id') id: string, @GetUser() user: UserPayload) {
+    return this.employeesService.remove(id, user.userId);
   }
 
-  // --- (Estos ya estaban bien porque pasaban el userId) ---
   @Get(':id/availability')
-  getAvailability(@Param('id') id: string, @GetUser() user: { sub: string }) {
-    return this.employeesService.getAvailability(id, user.sub);
+  getAvailability(@Param('id') id: string, @GetUser() user: UserPayload) {
+    return this.employeesService.getAvailability(id, user.userId);
   }
 
   @Patch(':id/availability')
   updateAvailability(
     @Param('id') id: string,
-    @GetUser() user: { sub: string },
+    @GetUser() user: UserPayload,
     @Body() updateAvailabilityDto: UpdateAvailabilityDto,
   ) {
     return this.employeesService.updateAvailability(
       id,
-      user.sub,
+      user.userId,
       updateAvailabilityDto,
     );
   }
